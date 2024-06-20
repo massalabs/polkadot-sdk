@@ -143,14 +143,13 @@ where
 
 /// Utility for building new (valid) blocks from a stream of extrinsics.
 pub struct BlockBuilder<'a, Block: BlockT, A: ProvideRuntimeApi<Block>, B> {
-	extrinsics: Vec<Block::Extrinsic>,
+	extrinsics: Arc<RwLock<Vec<Block::Extrinsic>>>,
 	api: ApiRef<'a, A::Api>,
 	version: u32,
 	parent_hash: Block::Hash,
 	backend: &'a B,
 	/// The estimated size of the block header.
-	estimated_header_size: usize,
-	pending_extrinsics: Arc<RwLock<Vec<Block::Extrinsic>>>,
+	estimated_header_size: usize
 }
 
 impl<'a, Block, A, B> BlockBuilder<'a, Block, A, B>
@@ -200,12 +199,11 @@ where
 
 		Ok(Self {
 			parent_hash,
-			extrinsics: Vec::new(),
+			extrinsics: pending_extrinsics,
 			api,
 			version,
 			backend,
 			estimated_header_size,
-			pending_extrinsics,
 		})
 	}
 
@@ -228,9 +226,8 @@ where
 
 			match res {
 				Ok(Ok(_)) => {
-					extrinsics.push(xt.clone());
 					{
-						self.pending_extrinsics.write().push(xt);
+						extrinsics.write().push(xt);
 					}
 					TransactionOutcome::Commit(Ok(()))
 				},
@@ -253,7 +250,7 @@ where
 		debug_assert_eq!(
 			header.extrinsics_root().clone(),
 			HashingFor::<Block>::ordered_trie_root(
-				self.extrinsics.iter().map(Encode::encode).collect(),
+				self.extrinsics.read().iter().map(Encode::encode).collect(),
 				sp_runtime::StateVersion::V0,
 			),
 		);
@@ -268,11 +265,11 @@ where
 			.map_err(sp_blockchain::Error::StorageChanges)?;
 		
 		{
-			self.pending_extrinsics.write().clear();
+			self.extrinsics.write().clear();
 		}
 
 		Ok(BuiltBlock {
-			block: <Block as BlockT>::new(header, self.extrinsics),
+			block: <Block as BlockT>::new(header, std::mem::take(&mut self.extrinsics.write())),
 			storage_changes,
 			proof,
 		})
@@ -300,7 +297,7 @@ where
 	/// If `include_proof` is `true`, the estimated size of the storage proof will be added
 	/// to the estimation.
 	pub fn estimate_block_size(&self, include_proof: bool) -> usize {
-		let size = self.estimated_header_size + self.extrinsics.encoded_size();
+		let size = self.estimated_header_size + self.extrinsics.read().encoded_size();
 
 		if include_proof {
 			size + self.api.proof_recorder().map(|pr| pr.estimate_encoded_size()).unwrap_or(0)
