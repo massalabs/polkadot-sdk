@@ -266,6 +266,10 @@ where
 			.api
 			.into_storage_changes(&state, self.parent_hash)
 			.map_err(sp_blockchain::Error::StorageChanges)?;
+		
+		{
+			self.pending_extrinsics.write().clear();
+		}
 
 		Ok(BuiltBlock {
 			block: <Block as BlockT>::new(header, self.extrinsics),
