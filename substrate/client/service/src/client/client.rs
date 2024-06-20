@@ -1407,11 +1407,7 @@ where
 
 impl<B, E, Block, RA> GetPendingBlockExtrinsics<Block> for Client<B, E, Block, RA>
 where
-	B: backend::Backend<Block> + Send + Sync + 'static,
-	E: CallExecutor<Block> + Send + Sync + 'static,
-	Block: BlockT,
-	Self: ChainHeaderBackend<Block> + ProvideRuntimeApi<Block>,
-	<Self as ProvideRuntimeApi<Block>>::Api: ApiExt<Block> + BlockBuilderApi<Block>,
+	Block: BlockT
 {
 	fn get_pending_extrinsics(&self) -> Vec<<Block as BlockT>::Extrinsic> {
 		return self.pending_block_builder_extrinsics.read().clone();
