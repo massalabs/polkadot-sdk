@@ -26,8 +26,11 @@
 
 #![warn(missing_docs)]
 
+use std::sync::Arc;
+
 use codec::Encode;
 
+use parking_lot::RwLock;
 use sp_api::{
 	ApiExt, ApiRef, Core, ProvideRuntimeApi, StorageChanges, StorageProof, TransactionOutcome,
 };
@@ -101,6 +104,16 @@ impl<Block: BlockT> BuiltBlock<Block> {
 	}
 }
 
+/// Trait that expose the extrinsics of the block builder
+pub trait GetPendingBlockExtrinsics<Block>
+where
+	Block: BlockT,
+	Self: Sized,
+{
+	/// Retrieves all the extrinsics already included in the block
+	fn get_pending_extrinsics(&self) -> Vec<Block::Extrinsic>;
+}
+
 /// Block builder provider
 pub trait BlockBuilderProvider<B, Block, RA>
 where
@@ -137,6 +150,7 @@ pub struct BlockBuilder<'a, Block: BlockT, A: ProvideRuntimeApi<Block>, B> {
 	backend: &'a B,
 	/// The estimated size of the block header.
 	estimated_header_size: usize,
+	pending_extrinsics: Arc<RwLock<Vec<Block::Extrinsic>>>,
 }
 
 impl<'a, Block, A, B> BlockBuilder<'a, Block, A, B>
@@ -158,6 +172,7 @@ where
 		record_proof: RecordProof,
 		inherent_digests: Digest,
 		backend: &'a B,
+		pending_extrinsics: Arc<RwLock<Vec<Block::Extrinsic>>>,
 	) -> Result<Self, Error> {
 		let header = <<Block as BlockT>::Header as HeaderT>::new(
 			parent_number + One::one(),
@@ -190,6 +205,7 @@ where
 			version,
 			backend,
 			estimated_header_size,
+			pending_extrinsics,
 		})
 	}
 
@@ -212,7 +228,10 @@ where
 
 			match res {
 				Ok(Ok(_)) => {
-					extrinsics.push(xt);
+					extrinsics.push(xt.clone());
+					{
+						self.pending_extrinsics.write().push(xt);
+					}
 					TransactionOutcome::Commit(Ok(()))
 				},
 				Ok(Err(tx_validity)) => TransactionOutcome::Rollback(Err(
@@ -312,6 +331,7 @@ mod tests {
 			RecordProof::Yes,
 			Default::default(),
 			&*backend,
+			Default::default(),
 		)
 		.unwrap()
 		.build()
@@ -343,6 +363,7 @@ mod tests {
 			RecordProof::Yes,
 			Default::default(),
 			&*backend,
+			Default::default(),
 		)
 		.unwrap();
 
@@ -359,6 +380,7 @@ mod tests {
 			RecordProof::Yes,
 			Default::default(),
 			&*backend,
+			Default::default(),
 		)
 		.unwrap();
 
@@ -375,6 +397,7 @@ mod tests {
 			RecordProof::Yes,
 			Default::default(),
 			&*backend,
+			Default::default(),
 		)
 		.unwrap()
 		.build()
