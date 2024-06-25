@@ -154,6 +154,7 @@ where
 	type Error = E::Error;
 
 	type Backend = B;
+	type Arg = E::Arg;
 
 	fn execution_extensions(&self) -> &ExecutionExtensions<Block> {
 		&self.execution_extensions
@@ -256,6 +257,70 @@ where
 		}
 		.map_err(Into::into)
 	}
+	
+	fn contextual_call_native(
+		&self,
+		at_hash: Block::Hash,
+		method: &str,
+		call_data: &[Self::Arg],
+		changes: &RefCell<OverlayedChanges<HashingFor<Block>>>,
+		recorder: &Option<ProofRecorder<Block>>,
+		call_context: CallContext,
+		extensions: &RefCell<Extensions>,
+	) -> Result<Vec<u8>, sp_blockchain::Error> {
+		let state = self.backend.state_at(at_hash)?;
+
+		let changes = &mut *changes.borrow_mut();
+
+		// It is important to extract the runtime code here before we create the proof
+		// recorder to not record it. We also need to fetch the runtime code from `state` to
+		// make sure we use the caching layers.
+		let state_runtime_code = sp_state_machine::backend::BackendRuntimeCode::new(&state);
+
+		let runtime_code =
+			state_runtime_code.runtime_code().map_err(sp_blockchain::Error::RuntimeCode)?;
+		let runtime_code = self.check_override(runtime_code, &state, at_hash)?.0;
+		let mut extensions = extensions.borrow_mut();
+
+		match recorder {
+			Some(recorder) => {
+				let trie_state = state.as_trie_backend();
+
+				let backend = sp_state_machine::TrieBackendBuilder::wrap(&trie_state)
+					.with_recorder(recorder.clone())
+					.build();
+
+				let mut state_machine = StateMachine::new(
+					&backend,
+					changes,
+					&self.executor,
+					method,
+					&[],
+					&mut extensions,
+					&runtime_code,
+					call_context,
+				)
+					.set_parent_hash(at_hash);
+				state_machine.execute_native(call_data)
+			},
+			None => {
+				let mut state_machine = StateMachine::new(
+					&state,
+					changes,
+					&self.executor,
+					method,
+					&[],
+					&mut extensions,
+					&runtime_code,
+					call_context,
+				)
+					.set_parent_hash(at_hash);
+				state_machine.execute_native(call_data)
+			},
+		}
+			.map_err(Into::into)
+	}
+
 
 	fn runtime_version(&self, at_hash: Block::Hash) -> sp_blockchain::Result<RuntimeVersion> {
 		let state = self.backend.state_at(at_hash)?;

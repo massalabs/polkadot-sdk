@@ -304,6 +304,51 @@ mod execution {
 
 			result.map_err(|e| Box::new(e) as Box<_>)
 		}
+		
+		/// Execute a call using the given state backend, overlayed changes, and call executor.
+		///
+		/// On an error, no prospective changes are written to the overlay.
+		///
+		/// Note: changes to code will be in place if this call is made again. For running partial
+		/// blocks (e.g. a transaction at a time), ensure a different method is used.
+		///
+		/// Returns the SCALE encoded result of the executed function.
+		pub fn execute_native(&mut self, args: &[Exec::Arg]) -> Result<Vec<u8>, Box<dyn Error>> {
+			self.overlay
+				.enter_runtime()
+				.expect("StateMachine is never called from the runtime; qed");
+
+			let mut ext = Ext::new(self.overlay, self.backend, Some(self.extensions));
+
+			let ext_id = ext.id;
+
+			trace!(
+				target: "state",
+				ext_id = %HexDisplay::from(&ext_id.to_le_bytes()),
+				method = %self.method,
+				parent_hash = %self.parent_hash.map(|h| format!("{:?}", h)).unwrap_or_else(|| String::from("None")),
+				input = ?HexDisplay::from(&self.call_data),
+				"Call",
+			);
+
+			let result = self
+				.exec
+				.call_native(&mut ext, self.runtime_code, self.method, args, self.context)
+				.0;
+
+			self.overlay
+				.exit_runtime()
+				.expect("Runtime is not able to call this function in the overlay; qed");
+
+			trace!(
+				target: "state",
+				ext_id = %HexDisplay::from(&ext_id.to_le_bytes()),
+				?result,
+				"Return",
+			);
+
+			result.map_err(|e| Box::new(e) as Box<_>)
+		}
 	}
 
 	/// Prove execution using the given state backend, overlayed changes, and call executor.

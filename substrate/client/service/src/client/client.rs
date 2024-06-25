@@ -45,10 +45,7 @@ use sc_consensus::{
 };
 use sc_executor::RuntimeVersion;
 use sc_telemetry::{telemetry, TelemetryHandle, SUBSTRATE_INFO};
-use sp_api::{
-	ApiExt, ApiRef, CallApiAt, CallApiAtParams, ConstructRuntimeApi, Core as CoreApi,
-	ProvideRuntimeApi,
-};
+use sp_api::{ApiError, ApiExt, ApiRef, CallApiAt, CallApiAtNativeParams, CallApiAtParams, ConstructRuntimeApi, Core as CoreApi, ProvideRuntimeApi};
 use sp_blockchain::{
 	self as blockchain, Backend as ChainBackend, CachedHeaderMetadata, Error,
 	HeaderBackend as ChainHeaderBackend, HeaderMetadata, Info as BlockchainInfo,
@@ -1684,10 +1681,25 @@ where
 	RA: Send + Sync,
 {
 	type StateBackend = B::State;
+	type Arg = E::Arg;
 
 	fn call_api_at(&self, params: CallApiAtParams<Block>) -> Result<Vec<u8>, sp_api::ApiError> {
 		self.executor
 			.contextual_call(
+				params.at,
+				params.function,
+				&params.arguments,
+				params.overlayed_changes,
+				params.recorder,
+				params.call_context,
+				params.extensions,
+			)
+			.map_err(Into::into)
+	}
+
+	fn call_madara(&self, params: CallApiAtNativeParams<Block, Self::Arg>) -> Result<Vec<u8>, ApiError> {
+		self.executor
+			.contextual_call_native(
 				params.at,
 				params.function,
 				&params.arguments,

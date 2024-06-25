@@ -40,6 +40,9 @@ pub enum CallContext {
 pub trait CodeExecutor: Sized + Send + Sync + ReadRuntimeVersion + Clone + 'static {
 	/// Externalities error type.
 	type Error: Display + Debug + Send + Sync + 'static;
+	
+	/// Argument type
+	type Arg;
 
 	/// Call a given method in the runtime.
 	///
@@ -53,6 +56,21 @@ pub trait CodeExecutor: Sized + Send + Sync + ReadRuntimeVersion + Clone + 'stat
 		data: &[u8],
 		context: CallContext,
 	) -> (Result<Vec<u8>, Self::Error>, bool);
+	
+	/// Call a given method in the runtime.
+	///
+	/// Returns a tuple of the result (either the output data or an execution error) together with a
+	/// `bool`, which is true if native execution was used.
+	fn call_native(
+		&self,
+		ext: &mut dyn Externalities,
+		runtime_code: &RuntimeCode,
+		method: &str,
+		data: &[Self::Arg],
+		context: CallContext,
+	) -> (Result<Vec<u8>, Self::Error>, bool);
+	
+	
 }
 
 /// Something that can fetch the runtime `:code`.

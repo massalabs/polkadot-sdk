@@ -651,15 +651,40 @@ pub struct CallApiAtParams<'a, Block: BlockT> {
 	pub extensions: &'a RefCell<Extensions>,
 }
 
+/// Parameters for [`CallApiAt::call_api_at`].
+#[cfg(feature = "std")]
+pub struct CallApiAtNativeParams<'a, Block: BlockT, Arg> {
+	/// The block id that determines the state that should be setup when calling the function.
+	pub at: Block::Hash,
+	/// The name of the function that should be called.
+	pub function: &'static str,
+	/// The encoded arguments of the function.
+	pub arguments: Vec<Arg>,
+	/// The overlayed changes that are on top of the state.
+	pub overlayed_changes: &'a RefCell<OverlayedChanges<HashingFor<Block>>>,
+	/// The call context of this call.
+	pub call_context: CallContext,
+	/// The optional proof recorder for recording storage accesses.
+	pub recorder: &'a Option<ProofRecorder<Block>>,
+	/// The extensions that should be used for this call.
+	pub extensions: &'a RefCell<Extensions>,
+}
+
+
+
 /// Something that can call into the an api at a given block.
 #[cfg(feature = "std")]
 pub trait CallApiAt<Block: BlockT> {
 	/// The state backend that is used to store the block states.
 	type StateBackend: StateBackend<HashingFor<Block>> + AsTrieBackend<HashingFor<Block>>;
 
+	type Arg;
+
 	/// Calls the given api function with the given encoded arguments at the given block and returns
 	/// the encoded result.
 	fn call_api_at(&self, params: CallApiAtParams<Block>) -> Result<Vec<u8>, ApiError>;
+
+	fn call_madara(&self, params: CallApiAtNativeParams<Block, Self::Arg>) -> Result<Vec<u8>, ApiError>;
 
 	/// Returns the runtime version at the given block.
 	fn runtime_version_at(&self, at_hash: Block::Hash) -> Result<RuntimeVersion, ApiError>;
@@ -678,9 +703,14 @@ pub trait CallApiAt<Block: BlockT> {
 #[cfg(feature = "std")]
 impl<Block: BlockT, T: CallApiAt<Block>> CallApiAt<Block> for std::sync::Arc<T> {
 	type StateBackend = T::StateBackend;
+	type Arg = T::Arg;
 
 	fn call_api_at(&self, params: CallApiAtParams<Block>) -> Result<Vec<u8>, ApiError> {
 		(**self).call_api_at(params)
+	}
+
+	fn call_madara(&self, params: CallApiAtNativeParams<Block, Self::Arg>) -> Result<Vec<u8>, ApiError> {
+		(**self).call_madara(params)
 	}
 
 	fn runtime_version_at(
