@@ -24,7 +24,7 @@ use log::{error, info, trace, warn};
 use parking_lot::{Mutex, RwLock};
 use prometheus_endpoint::Registry;
 use rand::Rng;
-use sc_block_builder::{BlockBuilderApi, BlockBuilderProvider, GetPendingBlockExtrinsics, RecordProof};
+use sc_block_builder::{BlockBuilderApi, BlockBuilderProvider, RecordProof};
 use sc_chain_spec::{resolve_state_version_from_wasm, BuildGenesisBlock};
 use sc_client_api::{
 	backend::{
@@ -112,8 +112,6 @@ where
 	finality_actions: Mutex<Vec<OnFinalityAction<Block>>>,
 	// Holds the block hash currently being imported. TODO: replace this with block queue.
 	importing_block: RwLock<Option<Block::Hash>>,
-	// Holds pending extrinsics being included in the block creation
-	pending_block_builder_extrinsics: Arc<RwLock<Vec<Block::Extrinsic>>>,
 	block_rules: BlockRules<Block>,
 	config: ClientConfig<Block>,
 	telemetry: Option<TelemetryHandle>,
@@ -447,7 +445,6 @@ where
 			finality_actions: Default::default(),
 			importing_block: Default::default(),
 			block_rules: BlockRules::new(fork_blocks, bad_blocks),
-			pending_block_builder_extrinsics: Default::default(),
 			config,
 			telemetry,
 			unpin_worker_sender,
@@ -1405,15 +1402,6 @@ where
 	}
 }
 
-impl<B, E, Block, RA> GetPendingBlockExtrinsics<Block> for Client<B, E, Block, RA>
-where
-	Block: BlockT
-{
-	fn get_pending_extrinsics(&self) -> Vec<<Block as BlockT>::Extrinsic> {
-		return self.pending_block_builder_extrinsics.read().clone();
-	}
-}
-
 impl<B, E, Block, RA> BlockBuilderProvider<B, Block, Self> for Client<B, E, Block, RA>
 where
 	B: backend::Backend<Block> + Send + Sync + 'static,
@@ -1435,7 +1423,6 @@ where
 			record_proof.into(),
 			inherent_digests,
 			&self.backend,
-			self.pending_block_builder_extrinsics.clone()
 		)
 	}
 
@@ -1451,7 +1438,6 @@ where
 			RecordProof::No,
 			inherent_digests,
 			&self.backend,
-			self.pending_block_builder_extrinsics.clone()
 		)
 	}
 }

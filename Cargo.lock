@@ -14606,7 +14606,6 @@ name = "sc-block-builder"
 version = "0.10.0-dev"
 dependencies = [
  "parity-scale-codec",
- "parking_lot 0.12.1",
  "sc-client-api",
  "sp-api",
  "sp-block-builder",
