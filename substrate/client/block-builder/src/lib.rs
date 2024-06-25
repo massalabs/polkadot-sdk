@@ -26,11 +26,8 @@
 
 #![warn(missing_docs)]
 
-use std::sync::Arc;
-
 use codec::Encode;
 
-use parking_lot::RwLock;
 use sp_api::{
 	ApiExt, ApiRef, Core, ProvideRuntimeApi, StorageChanges, StorageProof, TransactionOutcome,
 };
@@ -104,16 +101,6 @@ impl<Block: BlockT> BuiltBlock<Block> {
 	}
 }
 
-/// Trait that expose the extrinsics of the block builder
-pub trait GetPendingBlockExtrinsics<Block>
-where
-	Block: BlockT,
-	Self: Sized,
-{
-	/// Retrieves all the extrinsics already included in the block
-	fn get_pending_extrinsics(&self) -> Vec<Block::Extrinsic>;
-}
-
 /// Block builder provider
 pub trait BlockBuilderProvider<B, Block, RA>
 where
@@ -143,13 +130,13 @@ where
 
 /// Utility for building new (valid) blocks from a stream of extrinsics.
 pub struct BlockBuilder<'a, Block: BlockT, A: ProvideRuntimeApi<Block>, B> {
-	extrinsics: Arc<RwLock<Vec<Block::Extrinsic>>>,
+	extrinsics: Vec<Block::Extrinsic>,
 	api: ApiRef<'a, A::Api>,
 	version: u32,
 	parent_hash: Block::Hash,
 	backend: &'a B,
 	/// The estimated size of the block header.
-	estimated_header_size: usize
+	estimated_header_size: usize,
 }
 
 impl<'a, Block, A, B> BlockBuilder<'a, Block, A, B>
@@ -171,7 +158,6 @@ where
 		record_proof: RecordProof,
 		inherent_digests: Digest,
 		backend: &'a B,
-		pending_extrinsics: Arc<RwLock<Vec<Block::Extrinsic>>>,
 	) -> Result<Self, Error> {
 		let header = <<Block as BlockT>::Header as HeaderT>::new(
 			parent_number + One::one(),
@@ -199,7 +185,7 @@ where
 
 		Ok(Self {
 			parent_hash,
-			extrinsics: pending_extrinsics,
+			extrinsics: Vec::new(),
 			api,
 			version,
 			backend,
@@ -226,9 +212,7 @@ where
 
 			match res {
 				Ok(Ok(_)) => {
-					{
-						extrinsics.write().push(xt);
-					}
+					extrinsics.push(xt);
 					TransactionOutcome::Commit(Ok(()))
 				},
 				Ok(Err(tx_validity)) => TransactionOutcome::Rollback(Err(
@@ -250,7 +234,7 @@ where
 		debug_assert_eq!(
 			header.extrinsics_root().clone(),
 			HashingFor::<Block>::ordered_trie_root(
-				self.extrinsics.read().iter().map(Encode::encode).collect(),
+				self.extrinsics.iter().map(Encode::encode).collect(),
 				sp_runtime::StateVersion::V0,
 			),
 		);
@@ -263,13 +247,9 @@ where
 			.api
 			.into_storage_changes(&state, self.parent_hash)
 			.map_err(sp_blockchain::Error::StorageChanges)?;
-		
-		{
-			self.extrinsics.write().clear();
-		}
 
 		Ok(BuiltBlock {
-			block: <Block as BlockT>::new(header, std::mem::take(&mut self.extrinsics.write())),
+			block: <Block as BlockT>::new(header, self.extrinsics),
 			storage_changes,
 			proof,
 		})
@@ -297,7 +277,7 @@ where
 	/// If `include_proof` is `true`, the estimated size of the storage proof will be added
 	/// to the estimation.
 	pub fn estimate_block_size(&self, include_proof: bool) -> usize {
-		let size = self.estimated_header_size + self.extrinsics.read().encoded_size();
+		let size = self.estimated_header_size + self.extrinsics.encoded_size();
 
 		if include_proof {
 			size + self.api.proof_recorder().map(|pr| pr.estimate_encoded_size()).unwrap_or(0)
@@ -332,7 +312,6 @@ mod tests {
 			RecordProof::Yes,
 			Default::default(),
 			&*backend,
-			Default::default(),
 		)
 		.unwrap()
 		.build()
@@ -364,7 +343,6 @@ mod tests {
 			RecordProof::Yes,
 			Default::default(),
 			&*backend,
-			Default::default(),
 		)
 		.unwrap();
 
@@ -381,7 +359,6 @@ mod tests {
 			RecordProof::Yes,
 			Default::default(),
 			&*backend,
-			Default::default(),
 		)
 		.unwrap();
 
@@ -398,7 +375,6 @@ mod tests {
 			RecordProof::Yes,
 			Default::default(),
 			&*backend,
-			Default::default(),
 		)
 		.unwrap()
 		.build()
