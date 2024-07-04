@@ -48,6 +48,11 @@ pub trait CallExecutor<B: BlockT>: RuntimeVersionOf {
 	/// The backend used by the node.
 	type Backend: crate::backend::Backend<B>;
 
+	/// Argument type
+	type Arg;
+	/// Return type
+	type Ret;
+	
 	/// Returns the [`ExecutionExtensions`].
 	fn execution_extensions(&self) -> &ExecutionExtensions<B>;
 
@@ -61,7 +66,7 @@ pub trait CallExecutor<B: BlockT>: RuntimeVersionOf {
 		call_data: &[u8],
 		context: CallContext,
 	) -> Result<Vec<u8>, sp_blockchain::Error>;
-
+	
 	/// Execute a contextual call on top of state in a block of a given hash.
 	///
 	/// No changes are made.
@@ -77,6 +82,22 @@ pub trait CallExecutor<B: BlockT>: RuntimeVersionOf {
 		call_context: CallContext,
 		extensions: &RefCell<Extensions>,
 	) -> sp_blockchain::Result<Vec<u8>>;
+	
+	/// Execute a contextual call on top of state in a block of a given hash.
+	///
+	/// No changes are made.
+	/// Before executing the method, passed header is installed as the current header
+	/// of the execution context.
+	fn contextual_call_native(
+		&self,
+		at_hash: B::Hash,
+		method: &str,
+		call_data: &[Self::Arg],
+		changes: &RefCell<OverlayedChanges<HashingFor<B>>>,
+		proof_recorder: &Option<ProofRecorder<B>>,
+		call_context: CallContext,
+		extensions: &RefCell<Extensions>,
+	) -> sp_blockchain::Result<Self::Ret>;
 
 	/// Extract RuntimeVersion of given block
 	///

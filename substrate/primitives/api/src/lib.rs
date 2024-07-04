@@ -243,6 +243,7 @@ pub const MAX_EXTRINSIC_DEPTH: u32 = 256;
 /// Note that the latest version (4 in our example above) always contains all methods from all
 /// the versions before.
 pub use sp_api_proc_macro::decl_runtime_apis;
+pub use sp_api_proc_macro::decl_runtime_apis_native;
 
 /// Tags given trait implementations as runtime apis.
 ///
@@ -533,6 +534,10 @@ pub enum ApiError {
 		#[source]
 		error: codec::Error,
 	},
+	#[error("Failed to unwrap enum in order to return value of {function}")]
+	FailedToUnwrapEnumForReturnValue {
+		function: &'static str,
+	},
 	#[error("Failed to convert return value from runtime to node of {function}")]
 	FailedToConvertReturnValue {
 		function: &'static str,
@@ -641,15 +646,41 @@ pub struct CallApiAtParams<'a, Block: BlockT> {
 	pub extensions: &'a RefCell<Extensions>,
 }
 
+/// Parameters for [`CallApiAt::call_api_at`].
+#[cfg(feature = "std")]
+pub struct CallApiAtNativeParams<'a, Block: BlockT, Arg> {
+	/// The block id that determines the state that should be setup when calling the function.
+	pub at: Block::Hash,
+	/// The name of the function that should be called.
+	pub function: &'static str,
+	/// The encoded arguments of the function.
+	pub arguments: Vec<Arg>,
+	/// The overlayed changes that are on top of the state.
+	pub overlayed_changes: &'a RefCell<OverlayedChanges<HashingFor<Block>>>,
+	/// The call context of this call.
+	pub call_context: CallContext,
+	/// The optional proof recorder for recording storage accesses.
+	pub recorder: &'a Option<ProofRecorder<Block>>,
+	/// The extensions that should be used for this call.
+	pub extensions: &'a RefCell<Extensions>,
+}
+
+
+
 /// Something that can call into the an api at a given block.
 #[cfg(feature = "std")]
 pub trait CallApiAt<Block: BlockT> {
 	/// The state backend that is used to store the block states.
 	type StateBackend: StateBackend<HashingFor<Block>> + AsTrieBackend<HashingFor<Block>>;
 
+	type Arg;
+	type Ret;
+
 	/// Calls the given api function with the given encoded arguments at the given block and returns
 	/// the encoded result.
 	fn call_api_at(&self, params: CallApiAtParams<Block>) -> Result<Vec<u8>, ApiError>;
+
+	fn call_madara(&self, params: CallApiAtNativeParams<Block, Self::Arg>) -> Result<Self::Ret, ApiError>;
 
 	/// Returns the runtime version at the given block.
 	fn runtime_version_at(&self, at_hash: Block::Hash) -> Result<RuntimeVersion, ApiError>;
