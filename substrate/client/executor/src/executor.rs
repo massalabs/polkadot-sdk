@@ -28,6 +28,7 @@ use std::{
 	path::PathBuf,
 	sync::Arc,
 };
+use std::panic::RefUnwindSafe;
 
 use codec::Encode;
 use sc_executor_common::{
@@ -71,8 +72,16 @@ pub trait NativeExecutionDispatch: Send + Sync {
 	/// besides the default Substrate runtime interfaces.
 	type ExtendHostFunctions: HostFunctions;
 
+	/// Argument type
+	type Arg: UnwindSafe + RefUnwindSafe;
+	/// Return type
+	type Ret: UnwindSafe + RefUnwindSafe;
+
 	/// Dispatch a method in the runtime.
 	fn dispatch(method: &str, data: &[u8]) -> Option<Vec<u8>>;
+
+	/// Dispatch a method in the runtime.
+	fn dispatch_native(method: &str, data: &[Self::Arg]) -> Option<Self::Ret>;
 
 	/// Provide native runtime version.
 	fn native_version() -> NativeVersion;
@@ -485,6 +494,8 @@ where
 	H: HostFunctions,
 {
 	type Error = Error;
+	type Arg = ();
+	type Ret = ();
 
 	fn call(
 		&self,
@@ -525,6 +536,10 @@ where
 		);
 
 		(result, false)
+	}
+
+	fn call_native(&self, ext: &mut dyn Externalities, runtime_code: &RuntimeCode, method: &str, data: &[Self::Arg], context: CallContext) -> (std::result::Result<Self::Ret, Self::Error>, bool) {
+		unimplemented!()
 	}
 }
 
@@ -638,6 +653,8 @@ impl<D: NativeExecutionDispatch> GetNativeVersion for NativeElseWasmExecutor<D> 
 
 impl<D: NativeExecutionDispatch + 'static> CodeExecutor for NativeElseWasmExecutor<D> {
 	type Error = Error;
+	type Arg = D::Arg;
+	type Ret = D::Ret;
 
 	fn call(
 		&self,
@@ -661,6 +678,27 @@ impl<D: NativeExecutionDispatch + 'static> CodeExecutor for NativeElseWasmExecut
             Err(err) => Err(err),
         };
     	(result, used_native)
+	}
+
+	fn call_native(&self, ext: &mut dyn Externalities, runtime_code: &RuntimeCode, method: &str, data: &[Self::Arg], context: CallContext) -> (std::result::Result<Self::Ret, Self::Error>, bool) {
+
+		let mut used_native = true;
+
+		let result_ = with_externalities_safe(ext, move || D::dispatch_native(method, data));
+
+		let result = match result_ {
+			Ok(Some(res)) => {
+				Ok(res)
+			},
+			Ok(None) => {
+				Err(Error::MethodNotFound(method.to_owned()))
+			},
+			Err(e) => {
+				Err(e)
+			}
+		};
+
+		(result, used_native)
 	}
 }
 

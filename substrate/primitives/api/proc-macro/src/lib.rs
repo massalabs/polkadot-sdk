@@ -23,6 +23,7 @@ use proc_macro::TokenStream;
 
 mod common;
 mod decl_runtime_apis;
+mod decl_runtime_apis_native;
 mod impl_runtime_apis;
 mod mock_impl_runtime_apis;
 #[cfg(feature = "frame-metadata")]
@@ -42,4 +43,9 @@ pub fn mock_impl_runtime_apis(input: TokenStream) -> TokenStream {
 #[proc_macro]
 pub fn decl_runtime_apis(input: TokenStream) -> TokenStream {
 	decl_runtime_apis::decl_runtime_apis_impl(input)
+}
+
+#[proc_macro]
+pub fn decl_runtime_apis_native(input: TokenStream) -> TokenStream {
+	decl_runtime_apis_native::decl_runtime_apis_native_impl(input)
 }

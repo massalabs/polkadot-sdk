@@ -30,8 +30,14 @@ impl sc_executor::NativeExecutionDispatch for ExecutorDispatch {
 		sp_statement_store::runtime_api::HostFunctions,
 	);
 
+	type Arg = ();
+
 	fn dispatch(method: &str, data: &[u8]) -> Option<Vec<u8>> {
 		kitchensink_runtime::api::dispatch(method, data)
+	}
+
+	fn dispatch_native(method: &str, data: &[Self::Arg]) -> Option<Vec<u8>> {
+		todo!()
 	}
 
 	fn native_version() -> sc_executor::NativeVersion {
